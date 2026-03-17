@@ -1,113 +1,113 @@
 # Data Collection App (iotaPJ)
 
-Questa è un'applicazione Flutter sviluppata per la registrazione e l'invio intensivo dei dati dai sensori del dispositivo e da altre informazioni di contesto. Il progetto è strutturato utilizzando le best practices di architettura (domain-driven/clean architecture) per garantire scalabilità e facilitare il lavoro in team e su GitHub.
+This is a Flutter application developed for intensive background recording and uploading of device sensor data and other contextual information. The project is structured using best architecture practices (Domain-Driven/Clean Architecture) to ensure scalability and facilitate teamwork and GitHub collaboration.
 
-L'app continua la registrazione dei dati anche quando è chiusa o in background grazie all'uso di Service in background dedicati per Android/iOS.
-
----
-
-## 🚀 Funzionalità Principali
-
-*   **Raccolta Dati Sensori Continuativa**: Acquisizione in background dai sensori (Accelerometro, Giroscopio, ecc.) tramite `sensors_plus`.
-*   **Informazioni sul Contesto**: Acquisizione dello stato della batteria (`battery_plus`) e potenziale context-awareness aggiuntiva.
-*   **Gestione Sessioni**: Avvio, pausa e invio delle registrazioni di sessione.
-*   **Background Tasks & Services**: Utilizzo integrato di `flutter_background_service` e `workmanager` per l'esecuzione ininterrotta della ricezione dei dati.
-*   **Archivio Dati Offline**: Salvataggio asincrono, strutturato ed efficiente di tutti i log tramite `drift` (SQLite). Le API garantiscono di effettuare le upload sync quando la connessione lo permette.
-*   **Autenticazione & Storage Sicuro**: Gestione dei token OAuth e delle credenziali sensibili su `flutter_secure_storage`.
-*   **Ecological Momentary Assessment (EMA)**: Modulo per sottoporre questionari e valutazioni contestuali all'utente.
-*   **Sistema Notifiche**: Interazione diretta durante l'esecuzione in background tramite un sistema avanzato di notifiche (`awesome_notifications`, `flutter_local_notifications`).
+The app continuously records data even when closed or in the background, utilizing dedicated Background Services for Android/iOS.
 
 ---
 
-## 📂 Architettura e Struttura del Codice
+## 🚀 Key Features
 
-Il progetto segue un approccio Feature-First con stratificazione (Layered Architecture).
-La root per lo sviluppo è `lib/` e contiene i seguenti layer:
+*   **Continuous Sensor Data Collection**: Background acquisition from sensors (Accelerometer, Gyroscope, etc.) via `sensors_plus`.
+*   **Contextual Information**: Monitoring battery state (`battery_plus`) and gathering potential additional context-awareness.
+*   **Session Management**: Start, pause, and upload session recordings.
+*   **Background Tasks & Services**: Seamless integration of `flutter_background_service` and `workmanager` for uninterrupted data reception.
+*   **Offline Data Storage**: Asynchronous, structured, and efficient saving of all logs using `drift` (SQLite). The APIs ensure upload syncs when the connection allows.
+*   **Authentication & Secure Storage**: Handling of OAuth tokens and sensitive credentials on `flutter_secure_storage`.
+*   **Ecological Momentary Assessment (EMA)**: Module to present questionnaires and contextual assessments to the user.
+*   **Notification System**: Direct interaction during background execution via an advanced notification system (`awesome_notifications`, `flutter_local_notifications`).
+
+---
+
+## 📂 Architecture and Code Structure
+
+The project follows a Layered, Feature-First approach.
+The development root is `lib/` and contains the following layers:
 
 ### `lib/app/`
-Entry point e definizioni globali per l'intero ciclo di vita dell'app.
-*   Setup del Tema, Inizializzazione Globale, e Configurazione del Router (`go_router`).
+Entry point and global definitions for the app's entire lifecycle.
+*   Theme Setup, Global Initialization, and Router Configuration (`go_router`).
 
 ### `lib/background/`
-Gestione dell'esecuzione dei task complessi al di fuori dell'interfaccia utente (UI).
-*   Codice specifico per `workmanager` e inizializzazione dei background service isolati (Isolates e Services Android/iOS).
+Management of complex tasks execution outside the User Interface (UI).
+*   Specific code for `workmanager` and initialization of isolated background services (Android/iOS Isolates and Services).
 
 ### `lib/data/`
-Strato responsabile dell'interazione con le risorse. Ha l'obiettivo di nascondere la provenienza dei dati ai moduli superiori.
-*   `local/`: Interazioni con il database SQLite gestito tramite **Drift**, DAO (es. EMA e sensori), e Secure Storage.
-*   `remote/`: Client API (setup di **Dio**, Interceptors) e le chiamate HTTP da e verso il server.
-*   `context/`: Wrapper per recuperare dati ambientali (Batteria, Posizione, ecc.).
-*   `sensors/`: Lettura diretta dallo strato hardware dei Sensori.
-*   `notifications/`: Interazioni API con lo strato OS delle notifiche push e locali.
+Layer responsible for interacting with resources. It aims to hide data provenance from upper modules.
+*   `local/`: Interactions with the SQLite database managed via **Drift**, DAOs (e.g., EMA and sensors), and Secure Storage.
+*   `remote/`: API Clients (setup of **Dio**, Interceptors) and HTTP calls to and from the server.
+*   `context/`: Wrappers to retrieve environmental data (Battery, Location, etc.).
+*   `sensors/`: Direct reading from the hardware state of the Sensors.
+*   `notifications/`: API interactions with the OS layer for push and local notifications.
 
 ### `lib/domain/`
-Logica di business e oggetti di puro Dart. Le entità e le policy delle funzionalità (nessuna dipendenza verso pacchetti Flutter/UI).
+Business logic and pure Dart objects. Entities and feature policies (no dependencies on Flutter/UI packages).
 
 ### `lib/features/`
-Moduli chiusi, ognuno contiene la propria User Interface (Screen), State Management (Riverpod Providers o Controllers) e Logica specifica:
-*   `auth/`: Schermate di Login, SignUP e policy.
-*   `bandi/`: Consultazione bandi e opportunità.
-*   `earnings/`: Statistiche dei compensi ricavati dalla raccolta.
-*   `ema/`: Questionari attivi di Ecological Momentary Assessment.
-*   `home/`: Dashboard principale subito dopo il login.
-*   `session/`: Schermata in cui l'utente avvia, analizza o stoppa la sessione persistente di raccolta (Summary dei sensori).
-*   `settings/`: Impostazioni app (permessi, gestione account).
+Self-contained modules, each containing its own User Interface (Screen), State Management (Riverpod Providers or Controllers), and specific logic:
+*   `auth/`: Login, SignUP screens and policies.
+*   `bandi/`: Viewing grants and opportunities.
+*   `earnings/`: Statistics of compensation earned from data collection.
+*   `ema/`: Active Ecological Momentary Assessment questionnaires.
+*   `home/`: Main dashboard immediately after login.
+*   `session/`: Screen where the user starts, analyzes, or stops the persistent collection session (Sensors Summary).
+*   `settings/`: App settings (permissions, account management).
 
 ### `lib/main.dart`
-Il punto di ingresso del progetto, si occupa dell'avvio dell'app e dell'iniezione delle dipendenze primarie (es. `ProviderScope` di Riverpod).
+The entry point of the project, responsible for starting the app and injecting primary dependencies (e.g., Riverpod's `ProviderScope`).
 
 ---
 
-## 🛠 Stack Tecnologico
+## 🛠 Tech Stack
 
-Questo progetto usa alcune delle più moderne librerie per l'ecosistema Flutter:
+This project uses some of the most modern libraries in the Flutter ecosystem:
 
 *   **State Management & Dependency Injection**: [flutter_riverpod](https://pub.dev/packages/flutter_riverpod)
 *   **Routing**: [go_router](https://pub.dev/packages/go_router)
-*   **Database Relazionale (ORM)**: [drift](https://pub.dev/packages/drift)
-*   **Networking HTTP**: [dio](https://pub.dev/packages/dio)
-*   **Task In Background**: [flutter_background_service](https://pub.dev/packages/flutter_background_service) / [workmanager](https://pub.dev/packages/workmanager)
-*   **Accesso Sensori**: [sensors_plus](https://pub.dev/packages/sensors_plus)
-*   **Permessi Applicazione**: [permission_handler](https://pub.dev/packages/permission_handler)
+*   **Relational Database (ORM)**: [drift](https://pub.dev/packages/drift)
+*   **HTTP Networking**: [dio](https://pub.dev/packages/dio)
+*   **Background Tasks**: [flutter_background_service](https://pub.dev/packages/flutter_background_service) / [workmanager](https://pub.dev/packages/workmanager)
+*   **Sensors Access**: [sensors_plus](https://pub.dev/packages/sensors_plus)
+*   **Application Permissions**: [permission_handler](https://pub.dev/packages/permission_handler)
 
 ---
 
-## 💻 Prerequisiti per lo Sviluppo
+## 💻 Development Prerequisites
 
 *   **Flutter SDK**: `^3.10.3`
-*   Android Studio / VS Code, con plugin Dart & Flutter installati.
-*   Per Android, assicurati che il manifest e le impostazioni Gradle supportino i servizi background. A causa della natura dei Background Services e SQLite, l'app va testata su un **dispositivo fisico o su un emulatore ben configurato**.
+*   Android Studio / VS Code, with Dart & Flutter plugins installed.
+*   For Android, assure the manifest and Gradle settings support background services. Due to the nature of Background Services and SQLite, the app must be tested on a **physical device or a properly configured emulator**.
 
 ---
 
-## ⚙️ Guida al Setup Iniziale (Getting Started)
+## ⚙️ Getting Started Setup
 
-1. **Clonare il repository**
+1. **Clone the repository**
    ```bash
-   git clone <URL_della_tua_repo>
-   cd <nome_cartella_repo>
+   git clone <your_repo_URL>
+   cd <repo_folder_name>
    ```
 
-2. **Scaricare le dipendenze**
-   Scarica i package base listati nel pubspec.
+2. **Download dependencies**
+   Download the base packages listed in the pubspec.
    ```bash
    flutter pub get
    ```
 
-3. **Generare il Codice (Build Runner)**
-   Il progetto usa Drift (e potenzialmente Riverpod o Freezed). Molti file sono originati dinamicamente. *Non cercare mai di modificare i file con estensione `.g.dart` o simili*. Segui le interfacce generatrici e avvia il motore da shell:
+3. **Code Generation (Build Runner)**
+   The project uses Drift (and potentially Riverpod or Freezed). Many files are generated dynamically. *Never try to modify files with the `.g.dart` extension or similar*. Follow the generating interfaces and start the engine from the shell:
    ```bash
    flutter pub run build_runner build --delete-conflicting-outputs
    ```
-   > 💡 *Suggerimento*: Durante lo sviluppo attivo, esegui il watch per generare automaticamente i file man mano che editi classi/provider/database:
+   > 💡 *Tip*: During active development, run the watch command to generate files automatically as you edit classes/providers/databases:
    > `flutter pub run build_runner watch --delete-conflicting-outputs`
 
-4. **Avviare il Progetto**
-   Costruisci ed esegui sul tuo device:
+4. **Run the Project**
+   Build and run on your device:
    ```bash
    flutter run
    ```
 
-## ⚠️ Note ai Collaboratori
-*   **Generazione codice**: Assicurati di non fare *commit* volontari su conflitti ai file `.g.dart`. Esegui sempre una passata con `build_runner` pulita in caso di problemi d'inconsistenza Riverpod o Drift.
-*   **Permessi Hardware e Batteria**: Gran parte dell'app dipende dall'autorizzazione dell'utente a bypassare l'energy saving (doze mode di Android) e consentire localizzazione locale + background. Durante il debug su dispositivi fisici, accetta manualmente questi popup.
+## ⚠️ Notes for Contributors
+*   **Code Generation**: Make sure not to manually commit conflict resolution on `.g.dart` files. Always run a clean `build_runner` pass in case of Riverpod or Drift inconsistency issues.
+*   **Hardware and Battery Permissions**: Much of the app relies on user authorization to bypass energy saving (Android doze mode) and allow local + background location. During debugging on physical devices, manually accept these popups.
