@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:go_router/go_router.dart';
 import 'home_controller.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  final String bandoId;
+  const HomeScreen({super.key, required this.bandoId});
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -34,38 +36,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _checkPermissions() async {
-    final controller = ref.read(homeProvider.notifier);
+    final controller = ref.read(homeProvider(widget.bandoId).notifier);
 
     // IMU sensors (accelerometer, gyroscope, magnetometer) require NO runtime
     // permission on Android — they are always available.
-    controller.updatePermission('Sensori (Accel/Gyro/Mag)', true);
+    controller.updatePermission('Sensors (Accel/Gyro/Mag)', true);
 
     // These DO require runtime permission requests:
     final notification = await Permission.notification.status;
     final battery = await Permission.ignoreBatteryOptimizations.status;
     final activity = await Permission.activityRecognition.status;
 
-    controller.updatePermission('Notifiche', notification.isGranted);
-    controller.updatePermission('Ottimizzazione batteria', battery.isGranted);
-    controller.updatePermission('Attività fisica', activity.isGranted);
+    controller.updatePermission('Notifications', notification.isGranted);
+    controller.updatePermission('Battery Optimization', battery.isGranted);
+    controller.updatePermission('Physical Activity', activity.isGranted);
   }
 
   Future<void> _requestPermission(String name) async {
-    final controller = ref.read(homeProvider.notifier);
+    final controller = ref.read(homeProvider(widget.bandoId).notifier);
 
     switch (name) {
-      case 'Notifiche':
+      case 'Notifications':
         final r = await Permission.notification.request();
         controller.updatePermission(name, r.isGranted);
         break;
 
-      case 'Ottimizzazione batteria':
+      case 'Battery Optimization':
         // This opens the system settings page — permission_handler handles it.
         await Permission.ignoreBatteryOptimizations.request();
         // Status is re-checked when the app resumes via didChangeAppLifecycleState
         break;
 
-      case 'Attività fisica':
+      case 'Physical Activity':
         final r = await Permission.activityRecognition.request();
         controller.updatePermission(name, r.isGranted);
         break;
@@ -76,7 +78,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _onUpload(BuildContext context) async {
-    final controller = ref.read(homeProvider.notifier);
+    final controller = ref.read(homeProvider(widget.bandoId).notifier);
     await controller.uploadRandomRecords();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,17 +93,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(homeProvider);
+    final state = ref.watch(homeProvider(widget.bandoId));
     final allGranted = state.permissions.values.every((v) => v);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1117),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A1D2E),
-        title: const Text(
-          'Data Collector',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        title: Text('Collector - ${widget.bandoId}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [
           state.isUploading
               ? const Padding(
@@ -116,7 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                 )
               : IconButton(
-                  tooltip: 'Invia 100 record random',
+                  tooltip: 'Send 100 random records',
                   icon: const Icon(Icons.upload_rounded, color: Colors.white),
                   onPressed: () => _onUpload(context),
                 ),
@@ -148,7 +147,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       fontSize: 11,
                       fontFamily: 'monospace',
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
                   ),
                 ),
               ],
@@ -161,7 +161,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _SectionCard(
             icon: Icons.bar_chart_rounded,
             iconColor: const Color(0xFF6C63FF),
-            title: 'Dati Inviati',
+            title: 'Data Summary',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -180,7 +180,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${state.totalRecordsSent} record totali',
+                      '${state.totalRecordsSent} total records',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -189,7 +189,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                     Flexible(
                       child: Text(
-                        'Ultimo sync: ${state.lastSync}',
+                        'Last sync: ${state.lastSync}',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.45),
                           fontSize: 12,
@@ -205,7 +205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   child: OutlinedButton.icon(
                     onPressed: () => _showDataSummary(context),
                     icon: const Icon(Icons.analytics_outlined, size: 18),
-                    label: const Text('Dettaglio Dati'),
+                    label: const Text('Data Details'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF6C63FF),
                       side: const BorderSide(color: Color(0xFF6C63FF)),
@@ -228,58 +228,99 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             iconColor: allGranted
                 ? const Color(0xFF2ECC71)
                 : const Color(0xFFE67E22),
-            title: 'Permessi Richiesti',
+            title: 'Required Permissions',
             child: Column(
-              children: state.permissions.entries.map((entry) {
-                final granted = entry.value;
-                // Sensor permission is auto-granted — don't show Concedi button
-                final isAutoGranted = entry.key == 'Sensori (Accel/Gyro/Mag)';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      Icon(
-                        granted
-                            ? Icons.check_circle_rounded
-                            : Icons.warning_amber_rounded,
-                        color: granted
-                            ? const Color(0xFF2ECC71)
-                            : const Color(0xFFE67E22),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          entry.key,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.85),
-                            fontSize: 14,
-                          ),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enable the necessary sensors to participate in this bounty.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 12),
+                ...state.permissions.entries.map((entry) {
+                  final granted = entry.value;
+                  // Sensor permission is auto-granted — don't show Concedi button
+                  final isAutoGranted = entry.key == 'Sensors (Accel/Gyro/Mag)';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          granted
+                              ? Icons.check_circle_rounded
+                              : Icons.warning_amber_rounded,
+                          color: granted
+                              ? const Color(0xFF2ECC71)
+                              : const Color(0xFFE67E22),
+                          size: 20,
                         ),
-                      ),
-                      if (!granted && !isAutoGranted)
-                        TextButton(
-                          onPressed: () => _requestPermission(entry.key),
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF6C63FF),
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(60, 28),
-                          ),
+                        const SizedBox(width: 12),
+                        Expanded(
                           child: Text(
-                            entry.key == 'Ottimizzazione batteria'
-                                ? 'Impostazioni'
-                                : 'Concedi',
-                            style: const TextStyle(fontSize: 12),
+                            entry.key,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.85),
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                        if (!granted && !isAutoGranted)
+                          TextButton(
+                            onPressed: () => _requestPermission(entry.key),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF6C63FF),
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(60, 28),
+                            ),
+                            child: Text(
+                              entry.key == 'Battery Optimization'
+                                  ? 'Settings'
+                                  : 'Grant',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
             ),
           ),
 
           const SizedBox(height: 16),
+
+          if (widget.bandoId == 'b2')
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ElevatedButton.icon(
+                onPressed: () => context.push('/ema/${widget.bandoId}'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C63FF),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.edit_document),
+                label: const Text('Take Survey Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          if (widget.bandoId == 'b2')
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ElevatedButton(
+                onPressed: () {
+                  // TODO: Implement generate mock data logic
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C63FF),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Generate Mock Data', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          const SizedBox(height: 24),
 
           // ---------- Collection status chip ----------
           Container(
@@ -310,8 +351,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 Flexible(
                   child: Text(
                     allGranted
-                        ? 'Raccolta attiva ✓'
-                        : 'Concedi tutti i permessi per avviare la raccolta',
+                        ? 'Collection active ✓'
+                        : 'Grant all permissions to start collection',
                     style: TextStyle(
                       color: allGranted
                           ? const Color(0xFF2ECC71)
@@ -342,8 +383,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 : const Icon(Icons.upload_rounded),
             label: Text(
               state.isUploading
-                  ? 'Invio in corso…'
-                  : 'Invia 100 Record di Test',
+                  ? 'Uploading…'
+                  : 'Send 100 Test Records',
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6C63FF),
@@ -357,36 +398,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ],
       ),
       floatingActionButton: allGranted
-          ? FloatingActionButton.extended(
-              backgroundColor: state.isCollecting
-                  ? const Color(0xFFE67E22)
-                  : const Color(0xFF2ECC71),
-              onPressed: () {
-                final controller = ref.read(homeProvider.notifier);
-                if (state.isCollecting) {
-                  controller.pauseCollection();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Raccolta dati in pausa ⏸️')),
-                  );
-                } else {
-                  controller.resumeCollection();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Raccolta dati ripresa ▶️')),
-                  );
-                }
-              },
-              icon: Icon(
-                state.isCollecting
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                color: Colors.white,
-              ),
-              label: Text(
-                state.isCollecting ? 'Pausa' : 'Riprendi',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight + 16, right: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FloatingActionButton.extended(
+                    heroTag: 'action_btn',
+                    onPressed: () {
+                      if (state.isCollecting) {
+                        ref.read(homeProvider(widget.bandoId).notifier).pauseCollection();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Data collection paused ⏸️')),
+                        );
+                      } else {
+                        ref.read(homeProvider(widget.bandoId).notifier).resumeCollection();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Data collection resumed ▶️')),
+                        );
+                      }
+                    },
+                    backgroundColor: state.isCollecting ? const Color(0xFFE74C3C) : const Color(0xFF2ECC71),
+                    icon: Icon(state.isCollecting ? Icons.pause : Icons.play_arrow, color: Colors.white),
+                    label: Text(
+                      state.isCollecting
+                          ? 'Pause'
+                          : (state.totalRecordsSent == 0 && (state.lastSync == 'Mai' || state.lastSync == 'Never') ? 'Start' : 'Resume'),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
             )
           : null,
@@ -401,7 +443,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => const _DataSummarySheet(),
+      builder: (context) => _DataSummarySheet(bandoId: widget.bandoId),
     );
   }
 }
@@ -454,11 +496,12 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _DataSummarySheet extends ConsumerWidget {
-  const _DataSummarySheet();
+  final String bandoId;
+  const _DataSummarySheet({required this.bandoId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final controller = ref.watch(homeProvider.notifier);
+    final controller = ref.watch(homeProvider(bandoId).notifier);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -473,7 +516,7 @@ class _DataSummarySheet extends ConsumerWidget {
             elevation: 0,
             leading: const CloseButton(color: Colors.white),
             title: const Text(
-              'Riepilogo Dati',
+              'Data Summary',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -492,7 +535,7 @@ class _DataSummarySheet extends ConsumerWidget {
               if (countsSnapshot.hasError) {
                 return Center(
                   child: Text(
-                    'Errore: ${countsSnapshot.error}',
+                    'Error: ${countsSnapshot.error}',
                     style: const TextStyle(color: Colors.red),
                   ),
                 );
@@ -502,7 +545,7 @@ class _DataSummarySheet extends ConsumerWidget {
               if (counts.isEmpty) {
                 return const Center(
                   child: Text(
-                    'Nessun dato raccolto finora.',
+                    'No data collected yet.',
                     style: TextStyle(color: Colors.white54),
                   ),
                 );
@@ -562,7 +605,7 @@ class _DataSummarySheet extends ConsumerWidget {
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'Ultimi 10 records:',
+                            'Last 10 records:',
                             style: TextStyle(
                               color: Colors.white70,
                               fontSize: 13,
@@ -588,7 +631,7 @@ class _DataSummarySheet extends ConsumerWidget {
                               final records = recordsSnapshot.data ?? [];
                               if (records.isEmpty) {
                                 return const Text(
-                                  'Nessun record recente.',
+                                  'No recent records.',
                                   style: TextStyle(
                                     color: Colors.white54,
                                     fontSize: 12,

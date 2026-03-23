@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'features/home/home_screen.dart';
 import 'background/background_entrypoint.dart';
+import 'app/router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +18,7 @@ class DataCollectionApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Data Collector',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
@@ -27,7 +27,7 @@ class DataCollectionApp extends StatelessWidget {
           surface: const Color(0xFF1A1D2E),
         ),
       ),
-      home: const HomeScreen(),
+      routerConfig: routerConfig,
     );
   }
 }

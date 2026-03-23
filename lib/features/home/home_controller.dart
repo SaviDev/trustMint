@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../data/local/secure_storage.dart';
 import '../../data/local/database/app_database.dart';
@@ -45,20 +46,21 @@ class HomeController extends StateNotifier<HomeState> {
   final _storage = SecureStorage();
   final _db = dbInstance;
   Timer? _pollTimer;
+  final String bandoId;
 
-  HomeController()
+  HomeController(this.bandoId)
     : super(
         HomeState(
           userId: '',
           totalRecordsSent: 0,
-          lastSync: 'Mai',
+          lastSync: 'Never',
           isUploading: false,
           isCollecting: false,
           permissions: {
-            'Sensori (Accel/Gyro/Mag)': false,
-            'Notifiche': false,
-            'Ottimizzazione batteria': false,
-            'Attività fisica': false,
+            'Sensors (Accel/Gyro/Mag)': false,
+            'Notifications': false,
+            'Battery Optimization': false,
+            'Physical Activity': false,
           },
         ),
       ) {
@@ -74,32 +76,39 @@ class HomeController extends StateNotifier<HomeState> {
     }
 
     // Last sync label
-    final lastSync = await _storage.read('last_sync') ?? 'Mai';
+    final lastSync = await _storage.read('last_sync') ?? 'Never';
 
     // Real record count from DB
-    final count = await _db.sensorDao.totalCount();
+    final count = await _db.sensorDao.totalCount(bandoId);
 
-    // Check if background service is running
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
+    final isBandoActive = await _storage.read('active_$bandoId') == 'true';
 
     state = state.copyWith(
       userId: id,
       totalRecordsSent: count,
       lastSync: lastSync,
-      isCollecting: isRunning,
+      isCollecting: isBandoActive && isRunning,
     );
 
     // Poll DB every 5 seconds so the UI stays live while FGS writes data
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      final freshCount = await _db.sensorDao.totalCount();
+      final freshCount = await _db.sensorDao.totalCount(bandoId);
       final currentIsRunning = await service.isRunning();
+      final currentIsActive = await _storage.read('active_$bandoId') == 'true';
+      final nowCollecting = currentIsActive && currentIsRunning;
+
+      // also grab fresh lastSync implicitly
+      final freshSync = await _storage.read('last_sync') ?? 'Never';
 
       if (freshCount != state.totalRecordsSent ||
-          currentIsRunning != state.isCollecting) {
+          nowCollecting != state.isCollecting ||
+          freshSync != state.lastSync) {
         state = state.copyWith(
           totalRecordsSent: freshCount,
-          isCollecting: currentIsRunning,
+          lastSync: freshSync,
+          isCollecting: nowCollecting,
         );
       }
     });
@@ -126,28 +135,34 @@ class HomeController extends StateNotifier<HomeState> {
     }
   }
 
-  /// Pause data collection by stopping the Foreground Service
+  /// Pause data collection by pausing the loop inside the Foreground Service
   Future<void> pauseCollection() async {
+    await _storage.write('active_$bandoId', 'false');
     final service = FlutterBackgroundService();
-    service.invoke("stopService");
+    if (await service.isRunning()) {
+      service.invoke("syncBandiState");
+    }
     state = state.copyWith(isCollecting: false);
   }
 
-  /// Resume data collection by starting the Foreground Service
+  /// Resume data collection by starting the Foreground Service or invoking it
   Future<void> resumeCollection() async {
     // Only resume if permissions are still valid
     if (state.permissions.values.every((v) => v == true)) {
+      await _storage.write('active_$bandoId', 'true');
       final service = FlutterBackgroundService();
       if (!(await service.isRunning())) {
         await service.startService();
-        state = state.copyWith(isCollecting: true);
+      } else {
+        service.invoke("syncBandiState");
       }
+      state = state.copyWith(isCollecting: true);
     }
   }
 
   /// Get current data summary from database
   Future<Map<String, int>> getSensorCounts() async {
-    return await _db.sensorDao.getCountsPerType();
+    return await _db.sensorDao.getCountsPerType(bandoId);
   }
 
   /// Get the last [limit] records for a specific [sensorType]
@@ -155,7 +170,7 @@ class HomeController extends StateNotifier<HomeState> {
     String sensorType, {
     int limit = 10,
   }) async {
-    return await _db.sensorDao.getLastRecords(sensorType, limit);
+    return await _db.sensorDao.getLastRecords(sensorType, bandoId, limit);
   }
 
   /// Generates 100 random sensor samples, inserts them to DB, then "uploads" them.
@@ -168,6 +183,7 @@ class HomeController extends StateNotifier<HomeState> {
     final batch = List.generate(100, (i) {
       final type = ['accelerometer', 'gyroscope', 'magnetometer'][i % 3];
       return SensorDataTableCompanion.insert(
+        bandoId: Value(bandoId),
         userId: state.userId,
         sessionId: sessionId,
         sensorType: type,
@@ -192,7 +208,7 @@ class HomeController extends StateNotifier<HomeState> {
         '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}';
     await _storage.write('last_sync', label);
 
-    final freshCount = await _db.sensorDao.totalCount();
+    final freshCount = await _db.sensorDao.totalCount(bandoId);
     state = state.copyWith(
       isUploading: false,
       totalRecordsSent: freshCount,
@@ -201,6 +217,6 @@ class HomeController extends StateNotifier<HomeState> {
   }
 }
 
-final homeProvider = StateNotifierProvider<HomeController, HomeState>((ref) {
-  return HomeController();
+final homeProvider = StateNotifierProvider.family<HomeController, HomeState, String>((ref, bandoId) {
+  return HomeController(bandoId);
 });

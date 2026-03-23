@@ -31,6 +31,17 @@ class $SensorDataTableTable extends SensorDataTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _bandoIdMeta = const VerificationMeta(
+    'bandoId',
+  );
+  @override
+  late final GeneratedColumn<String> bandoId = GeneratedColumn<String>(
+    'bando_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _sessionIdMeta = const VerificationMeta(
     'sessionId',
   );
@@ -92,6 +103,7 @@ class $SensorDataTableTable extends SensorDataTable
   List<GeneratedColumn> get $columns => [
     id,
     userId,
+    bandoId,
     sessionId,
     sensorType,
     value,
@@ -120,6 +132,12 @@ class $SensorDataTableTable extends SensorDataTable
       );
     } else if (isInserting) {
       context.missing(_userIdMeta);
+    }
+    if (data.containsKey('bando_id')) {
+      context.handle(
+        _bandoIdMeta,
+        bandoId.isAcceptableOrUnknown(data['bando_id']!, _bandoIdMeta),
+      );
     }
     if (data.containsKey('session_id')) {
       context.handle(
@@ -176,6 +194,10 @@ class $SensorDataTableTable extends SensorDataTable
         DriftSqlType.string,
         data['${effectivePrefix}user_id'],
       )!,
+      bandoId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bando_id'],
+      ),
       sessionId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}session_id'],
@@ -208,6 +230,7 @@ class $SensorDataTableTable extends SensorDataTable
 class SensorData extends DataClass implements Insertable<SensorData> {
   final int id;
   final String userId;
+  final String? bandoId;
   final String sessionId;
   final String sensorType;
   final String value;
@@ -216,6 +239,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
   const SensorData({
     required this.id,
     required this.userId,
+    this.bandoId,
     required this.sessionId,
     required this.sensorType,
     required this.value,
@@ -227,6 +251,9 @@ class SensorData extends DataClass implements Insertable<SensorData> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['user_id'] = Variable<String>(userId);
+    if (!nullToAbsent || bandoId != null) {
+      map['bando_id'] = Variable<String>(bandoId);
+    }
     map['session_id'] = Variable<String>(sessionId);
     map['sensor_type'] = Variable<String>(sensorType);
     map['value'] = Variable<String>(value);
@@ -239,6 +266,9 @@ class SensorData extends DataClass implements Insertable<SensorData> {
     return SensorDataTableCompanion(
       id: Value(id),
       userId: Value(userId),
+      bandoId: bandoId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bandoId),
       sessionId: Value(sessionId),
       sensorType: Value(sensorType),
       value: Value(value),
@@ -255,6 +285,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
     return SensorData(
       id: serializer.fromJson<int>(json['id']),
       userId: serializer.fromJson<String>(json['userId']),
+      bandoId: serializer.fromJson<String?>(json['bandoId']),
       sessionId: serializer.fromJson<String>(json['sessionId']),
       sensorType: serializer.fromJson<String>(json['sensorType']),
       value: serializer.fromJson<String>(json['value']),
@@ -268,6 +299,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'userId': serializer.toJson<String>(userId),
+      'bandoId': serializer.toJson<String?>(bandoId),
       'sessionId': serializer.toJson<String>(sessionId),
       'sensorType': serializer.toJson<String>(sensorType),
       'value': serializer.toJson<String>(value),
@@ -279,6 +311,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
   SensorData copyWith({
     int? id,
     String? userId,
+    Value<String?> bandoId = const Value.absent(),
     String? sessionId,
     String? sensorType,
     String? value,
@@ -287,6 +320,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
   }) => SensorData(
     id: id ?? this.id,
     userId: userId ?? this.userId,
+    bandoId: bandoId.present ? bandoId.value : this.bandoId,
     sessionId: sessionId ?? this.sessionId,
     sensorType: sensorType ?? this.sensorType,
     value: value ?? this.value,
@@ -297,6 +331,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
     return SensorData(
       id: data.id.present ? data.id.value : this.id,
       userId: data.userId.present ? data.userId.value : this.userId,
+      bandoId: data.bandoId.present ? data.bandoId.value : this.bandoId,
       sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
       sensorType: data.sensorType.present
           ? data.sensorType.value
@@ -312,6 +347,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
     return (StringBuffer('SensorData(')
           ..write('id: $id, ')
           ..write('userId: $userId, ')
+          ..write('bandoId: $bandoId, ')
           ..write('sessionId: $sessionId, ')
           ..write('sensorType: $sensorType, ')
           ..write('value: $value, ')
@@ -325,6 +361,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
   int get hashCode => Object.hash(
     id,
     userId,
+    bandoId,
     sessionId,
     sensorType,
     value,
@@ -337,6 +374,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
       (other is SensorData &&
           other.id == this.id &&
           other.userId == this.userId &&
+          other.bandoId == this.bandoId &&
           other.sessionId == this.sessionId &&
           other.sensorType == this.sensorType &&
           other.value == this.value &&
@@ -347,6 +385,7 @@ class SensorData extends DataClass implements Insertable<SensorData> {
 class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
   final Value<int> id;
   final Value<String> userId;
+  final Value<String?> bandoId;
   final Value<String> sessionId;
   final Value<String> sensorType;
   final Value<String> value;
@@ -355,6 +394,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
   const SensorDataTableCompanion({
     this.id = const Value.absent(),
     this.userId = const Value.absent(),
+    this.bandoId = const Value.absent(),
     this.sessionId = const Value.absent(),
     this.sensorType = const Value.absent(),
     this.value = const Value.absent(),
@@ -364,6 +404,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
   SensorDataTableCompanion.insert({
     this.id = const Value.absent(),
     required String userId,
+    this.bandoId = const Value.absent(),
     required String sessionId,
     required String sensorType,
     required String value,
@@ -377,6 +418,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
   static Insertable<SensorData> custom({
     Expression<int>? id,
     Expression<String>? userId,
+    Expression<String>? bandoId,
     Expression<String>? sessionId,
     Expression<String>? sensorType,
     Expression<String>? value,
@@ -386,6 +428,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (userId != null) 'user_id': userId,
+      if (bandoId != null) 'bando_id': bandoId,
       if (sessionId != null) 'session_id': sessionId,
       if (sensorType != null) 'sensor_type': sensorType,
       if (value != null) 'value': value,
@@ -397,6 +440,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
   SensorDataTableCompanion copyWith({
     Value<int>? id,
     Value<String>? userId,
+    Value<String?>? bandoId,
     Value<String>? sessionId,
     Value<String>? sensorType,
     Value<String>? value,
@@ -406,6 +450,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
     return SensorDataTableCompanion(
       id: id ?? this.id,
       userId: userId ?? this.userId,
+      bandoId: bandoId ?? this.bandoId,
       sessionId: sessionId ?? this.sessionId,
       sensorType: sensorType ?? this.sensorType,
       value: value ?? this.value,
@@ -422,6 +467,9 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
     }
     if (userId.present) {
       map['user_id'] = Variable<String>(userId.value);
+    }
+    if (bandoId.present) {
+      map['bando_id'] = Variable<String>(bandoId.value);
     }
     if (sessionId.present) {
       map['session_id'] = Variable<String>(sessionId.value);
@@ -446,6 +494,7 @@ class SensorDataTableCompanion extends UpdateCompanion<SensorData> {
     return (StringBuffer('SensorDataTableCompanion(')
           ..write('id: $id, ')
           ..write('userId: $userId, ')
+          ..write('bandoId: $bandoId, ')
           ..write('sessionId: $sessionId, ')
           ..write('sensorType: $sensorType, ')
           ..write('value: $value, ')
@@ -1194,6 +1243,7 @@ typedef $$SensorDataTableTableCreateCompanionBuilder =
     SensorDataTableCompanion Function({
       Value<int> id,
       required String userId,
+      Value<String?> bandoId,
       required String sessionId,
       required String sensorType,
       required String value,
@@ -1204,6 +1254,7 @@ typedef $$SensorDataTableTableUpdateCompanionBuilder =
     SensorDataTableCompanion Function({
       Value<int> id,
       Value<String> userId,
+      Value<String?> bandoId,
       Value<String> sessionId,
       Value<String> sensorType,
       Value<String> value,
@@ -1227,6 +1278,11 @@ class $$SensorDataTableTableFilterComposer
 
   ColumnFilters<String> get userId => $composableBuilder(
     column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bandoId => $composableBuilder(
+    column: $table.bandoId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1275,6 +1331,11 @@ class $$SensorDataTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get bandoId => $composableBuilder(
+    column: $table.bandoId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get sessionId => $composableBuilder(
     column: $table.sessionId,
     builder: (column) => ColumnOrderings(column),
@@ -1315,6 +1376,9 @@ class $$SensorDataTableTableAnnotationComposer
 
   GeneratedColumn<String> get userId =>
       $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get bandoId =>
+      $composableBuilder(column: $table.bandoId, builder: (column) => column);
 
   GeneratedColumn<String> get sessionId =>
       $composableBuilder(column: $table.sessionId, builder: (column) => column);
@@ -1369,6 +1433,7 @@ class $$SensorDataTableTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> userId = const Value.absent(),
+                Value<String?> bandoId = const Value.absent(),
                 Value<String> sessionId = const Value.absent(),
                 Value<String> sensorType = const Value.absent(),
                 Value<String> value = const Value.absent(),
@@ -1377,6 +1442,7 @@ class $$SensorDataTableTableTableManager
               }) => SensorDataTableCompanion(
                 id: id,
                 userId: userId,
+                bandoId: bandoId,
                 sessionId: sessionId,
                 sensorType: sensorType,
                 value: value,
@@ -1387,6 +1453,7 @@ class $$SensorDataTableTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String userId,
+                Value<String?> bandoId = const Value.absent(),
                 required String sessionId,
                 required String sensorType,
                 required String value,
@@ -1395,6 +1462,7 @@ class $$SensorDataTableTableTableManager
               }) => SensorDataTableCompanion.insert(
                 id: id,
                 userId: userId,
+                bandoId: bandoId,
                 sessionId: sessionId,
                 sensorType: sensorType,
                 value: value,

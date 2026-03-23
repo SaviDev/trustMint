@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../features/auth/registration_screen.dart';
 import '../features/bandi/bandi_list_screen.dart';
@@ -6,6 +5,7 @@ import '../features/bandi/bando_detail_screen.dart';
 import '../features/session/session_screen.dart';
 import '../features/ema/ema_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/home/home_screen.dart';
 
 final GoRouter routerConfig = GoRouter(
   initialLocation: '/bandi',
@@ -23,6 +23,10 @@ final GoRouter routerConfig = GoRouter(
           builder: (context, state) => BandoDetailScreen(bandoId: state.pathParameters['id']!),
         ),
       ]
+    ),
+    GoRoute(
+      path: '/collector/:id',
+      builder: (context, state) => HomeScreen(bandoId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: '/session',

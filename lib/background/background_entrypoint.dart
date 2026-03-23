@@ -1,10 +1,14 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import '../data/local/secure_storage.dart';
 import 'sensor_loop.dart';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+Timer? _surveyTimer;
+Timer? _uploadTimer;
 
 /// Called once at startup to configure the background service.
 Future<void> initBackgroundService() async {
@@ -36,7 +40,7 @@ Future<void> initBackgroundService() async {
       isForegroundMode: true,
       notificationChannelId: 'data_collector_channel',
       initialNotificationTitle: 'Data Collector',
-      initialNotificationContent: 'Raccolta sensori attiva…',
+      initialNotificationContent: 'Sensor collection active...',
       foregroundServiceNotificationId: 888,
     ),
     iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart),
@@ -64,18 +68,82 @@ void onStart(ServiceInstance service) async {
   final sessionId =
       'sess-${now.year}${_p(now.month)}${_p(now.day)}-${_p(now.hour)}${_p(now.minute)}';
 
-  // Read the userId persisted by the UI isolate from SecureStorage
+  // Read the active bandoId and userId persisted by the UI isolate from SecureStorage
   final storage = SecureStorage();
   final userId = await storage.getUserId() ?? 'unknown';
+  SensorLoop? loop;
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('ic_bg_service_small');
+  const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+  await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
 
-  // Create and start the real sensor loop
-  final loop = await createSensorLoop(sessionId);
-  loop.start();
+  Future<void> syncBandiState() async {
+    final storage = SecureStorage();
+    final b1Active = await storage.read('active_b1') == 'true';
+    final b2Active = await storage.read('active_b2') == 'true';
 
-  // Update the FGS notification content periodically so the user can see
-  // the service is alive, and respond to stop requests
+    // Daily Sensors Logic
+    if (b1Active && loop == null) {
+      print('[BGS] Bando b1 ACTIVE. Starting loop and upload timer.');
+      loop = await createSensorLoop(sessionId, 'b1');
+      loop!.start();
+      _uploadTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
+        final n = DateTime.now();
+        final l = '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')} ${n.day.toString().padLeft(2, '0')}/${n.month.toString().padLeft(2, '0')}';
+        await SecureStorage().write('last_sync', l);
+      });
+    } else if (!b1Active && loop != null) {
+      print('[BGS] Bando b1 INACTIVE. Halting sensors.');
+      await loop!.stop();
+      loop = null;
+      _uploadTimer?.cancel();
+      _uploadTimer = null;
+    }
+
+    // Daily Mood Logic
+    if (b2Active && _surveyTimer == null) {
+      print('[BGS] Bando b2 ACTIVE. Starting survey notifications.');
+      _surveyTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+        flutterLocalNotificationsPlugin.show(
+          id: 0,
+          title: 'Daily Mood Survey 🔔',
+          body: 'It is time to log your daily mood! Tap to open.',
+          notificationDetails: const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'data_collector_channel',
+              'Data Collector Service',
+              importance: Importance.max,
+              priority: Priority.high,
+            ),
+          ),
+        );
+      });
+    } else if (!b2Active && _surveyTimer != null) {
+      print('[BGS] Bando b2 INACTIVE. Halting surveys.');
+      _surveyTimer?.cancel();
+      _surveyTimer = null;
+    }
+
+    // Self kill if both are entirely deactivated to save battery
+    if (!b1Active && !b2Active) {
+      print('[BGS] Zero bandos active. Killing Foreground Service.');
+      service.stopSelf();
+    }
+  }
+
+  // Initial Check
+  await syncBandiState();
+
+  // Unified dynamic synchronizer endpoint
+  service.on('syncBandiState').listen((_) async {
+    print('[BGS] Received syncBandiState event!');
+    await syncBandiState();
+  });
+
   service.on('stopService').listen((_) async {
-    await loop.stop();
+    _surveyTimer?.cancel();
+    _uploadTimer?.cancel();
+    if (loop != null) await loop!.stop();
     service.stopSelf();
   });
 }
