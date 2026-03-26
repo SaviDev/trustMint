@@ -11,7 +11,7 @@ List<int> _hexToBytes(String hex) {
   return result;
 }
 
-/// Signs transaction blocks (txBytes) using Ed25519 following the Sui/IOTA
+/// Signs transaction blocks (txBytes) using Ed25519 following the IOTA
 /// signature format: base64(scheme_flag || signature || public_key).
 class IotaSigner {
   IotaSigner({required String privateKeyHex, required String publicKeyHex})
@@ -48,8 +48,8 @@ class IotaSigner {
   }
 
   /// Computes the IOTA address from the public key.
-  /// Address = blake2b-256(publicKeyBytes)  (IOTA Rebased seems to not prepend 0x00 flag for the address unlike Sui)
-  Future<String> getSuiAddress() async {
+  /// Derived from blake2b-256(publicKeyBytes) (IOTA Rebased seems to not prepend 0x00 flag for the address)
+  Future<String> getIotaAddress() async {
     final message = Uint8List.fromList([..._publicKeyBytes]);
     final digest = await Blake2b(hashLengthInBytes: 32).hash(message);
     return '0x${digest.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';

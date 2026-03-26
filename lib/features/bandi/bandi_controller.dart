@@ -153,5 +153,5 @@ final walletAddressProvider = FutureProvider<String>((ref) async {
     privateKeyHex: IotaChainConstants.hardcodedPrivateKeyHex,
     publicKeyHex: IotaChainConstants.hardcodedPublicKeyHex,
   );
-  return await signer.getSuiAddress();
+  return await signer.getIotaAddress();
 });

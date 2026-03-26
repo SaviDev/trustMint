@@ -62,7 +62,7 @@ class IotaChainService {
     }
 
     try {
-      final userAddress = await _signer.getSuiAddress();
+      final userAddress = await _signer.getIotaAddress();
 
       // The payload to sign is the current data_hash from the worker
       List<int> dataHashBytes = hexToBytes(dataHashHex);
@@ -195,7 +195,7 @@ class IotaChainService {
     }
 
     try {
-      final userAddress = await _signer.getSuiAddress();
+      final userAddress = await _signer.getIotaAddress();
 
       final moveCall = await _client.unsafeMoveCall(
         signerAddress: userAddress,
@@ -257,7 +257,7 @@ class IotaChainService {
     final hashBytes = hexToBytes(newHashHex);
 
     try {
-      final userAddress = await _signer.getSuiAddress();
+      final userAddress = await _signer.getIotaAddress();
       final moveCall = await _client.unsafeMoveCall(
         signerAddress: userAddress,
         packageId: IotaChainConstants.packageId,
@@ -324,7 +324,7 @@ class IotaChainService {
         privateKeyHex: IotaChainConstants.backendPrivateKeyHex,
         publicKeyHex: IotaChainConstants.backendPublicKeyHex,
       );
-      final backendAddress = await backendSigner.getSuiAddress();
+      final backendAddress = await backendSigner.getIotaAddress();
       // Use the backend's DID to create the campaign
       final did = creatorDid ?? IotaChainConstants.backendDidObjectId;
 

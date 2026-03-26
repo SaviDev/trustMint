@@ -60,7 +60,7 @@ class IotaRpcClient {
     int gasBudget = IotaChainConstants.defaultGasBudget,
     String? gasPayment,
   }) async {
-    // IOTA Rebased follows Sui's method naming: unsafe_moveCall
+    // IOTA Rebased follows standard method naming: unsafe_moveCall
     final result = await _call('unsafe_moveCall', [
       signerAddress,
       packageId,

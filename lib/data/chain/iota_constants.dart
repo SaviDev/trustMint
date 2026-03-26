@@ -1,6 +1,6 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// Constants and placeholders for the IOTA (Sui-style) JSON-RPC integration.
+/// Constants and placeholders for the IOTA JSON-RPC integration.
 /// Replace the placeholder object IDs with your real on-chain objects when available.
 class IotaChainConstants {
   static const String rpcUrl = 'https://api.testnet.iota.cafe';

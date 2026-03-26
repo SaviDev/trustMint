@@ -1,4 +1,4 @@
-# Data Collection App (iotaPJ)
+﻿# Data Collection App (iotaPJ)
 
 This is a Flutter application developed for intensive background recording and uploading of device sensor data and other contextual information. The project is structured using best architecture practices (Domain-Driven/Clean Architecture) to ensure scalability and facilitate teamwork and GitHub collaboration.
 
@@ -116,42 +116,47 @@ This project uses some of the most modern libraries in the Flutter ecosystem:
 
 ## 🌐 IOTA Testnet Integration (MoveVM)
 
-We talk to the IOTA (Sui-style) JSON-RPC directly from Flutter using Dio.
+We talk to the IOTA JSON-RPC directly from Flutter using Dio.
 
 **Endpoint**: `https://api.testnet.iota.cafe`
 
-**Contract**: `packageId = 0x2c761d1efe3da5ef4315deb3e974b8fbdf46915bcc46b08eeb09c73aeb5345ac`, module `campaign` (`join_campaign`, `update_data_hash`).
+**Contract**: `packageId = 0x8a96acb05ed372f277780cff13a894a96e79c4f1f0a3980a2f1b78d65698bab4`, module `campaign` (`join_campaign`, `update_data_hash`).
 
 ### What is wired now
-1) **Join on-chain when the user taps “Join”** (see `BandiController.participate`). The app calls `join_campaign` and stores the returned `TaskTicket` object id in secure storage (`task_ticket_<bandoId>`).
-2) **Rolling hash commitments every chunk** (see `SensorLoop._processChunk`). Every 10s batch computes `H_n` and calls `update_data_hash(ticket, did, H_n)` on-chain.
-3) **Hardcoded signer** in `lib/data/chain/iota_constants.dart` (RFC8032 test vector). Fund the derived address on testnet before sending txs.
+1) **Real Campaign Creation**: Testing flow capability to spawn valid dynamic campaigns directly from the UI with randomized payloads and durations.
+2) **Join on-chain when the user taps Join**: The app calls join_campaign and stores the returned TaskTicket object id locally.
+3) **Rolling hash commitments every chunk** (see SensorLoop._processChunk). Every 10s batch computes H_n and calls update_data_hash(ticket, did, H_n) on-chain.
+4) **Validation and Payout Submit**: Tapping Complete Bounty & Payout performs a validation against the exact data_hash currently mapped inside the RPC on-chain structure via .getObject, completing the smart contract validations (submit_and_payout), deleting the local session gracefully, and granting the IOTA to the worker's wallet.
+
+### Environments & Secrets File (.env)
+To protect sensitive private keys, this repository uses a .env file for testing constants.
+A .env.example file is provided. Please copy it and rename it to .env, then fill in your local details:
+* BACKEND_PRIVATE_KEY_HEX / BACKEND_PUBLIC_KEY_HEX -> Used by the app to simulate the backend oracle Verifier signature logic natively.
+* HARDCODED_PRIVATE_KEY_HEX / HARDCODED_PUBLIC_KEY_HEX / HARDCODED_ADDRESS -> Used by the native user to fund gas and handle transaction signatures.
 
 ### Files to edit with your real values
 * `lib/data/chain/iota_constants.dart`
-   * `defaultCampaignObjectId` → the shared Campaign object ID created via `create_campaign`.
-   * `defaultUserDidObjectId` → your on-chain DID object ID.
-   * `placeholderTicketObjectId` → optional fallback (real ticket saved after `join_campaign`).
-   * `hardcodedPrivateKeyHex` / `hardcodedPublicKeyHex` / `hardcodedAddress` → replace with a funded Ed25519 keypair.
+   * `packageId` -> the address of your deployed standard smart contract.
+   * `defaultUserDidObjectId` -> your on-chain DID object ID.
+   * `backendDidObjectId` -> your Backend Verifier DID object ID.
+   * `defaultMarketplaceConfigObjectId` -> Initialized shared configuration.
 
-### Flow recap
+### E2E Flow recap
 ```
-Every 10s:
+0. Create Campaign: 
+   call create_campaign(bounty_amount) -> shared Campaign Object
+
+1. When user joins a campaign:
+   call join_campaign(campaign, did, clock) -> TaskTicket
+   store TaskTicket ID in SecureStorage for subsequent hash updates
+
+2. Every 10s (Background Collection):
    collect batch -> H_n = SHA256(H_{n-1} || chunk)
    upload chunk externally (TODO backend)
    call update_data_hash(ticket, did, H_n) on IOTA testnet
 
-When user joins a campaign:
-   call join_campaign(campaign, did, clock) -> TaskTicket
-   store TaskTicket ID in SecureStorage for subsequent hash updates
+3. Payout Phase:
+   call submit_and_payout(campaign, ticket, Config, did, OracleSignature)
+   Destroy ticket and grant funds
 ```
 
-### RPC details
-* Methods used: `iota_unsafe_moveCall` + `iota_executeTransactionBlock`.
-* Signatures: Ed25519, serialized as `base64(0x00 || signature || public_key)` with intent bytes `[0,0,0]` hashed via BLAKE2b-256.
-* Hash argument: `new_hash` is BCS-encoded `vector<u8>` (BCS length prefix + bytes, base64).
-
-### Quick checklist before sending txs
-* Fund the hardcoded address on testnet.
-* Replace the placeholder Campaign/DID/Ticket IDs in `iota_constants.dart`.
-* (Optional) Persist the user's DID in SecureStorage under key `user_did` to override the placeholder.
