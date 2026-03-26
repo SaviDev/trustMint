@@ -9,6 +9,7 @@ class Bando {
   final double payout;
   final List<SensorSpec> requiredSensors;
   final EmaConfig? emaConfig;
+  final String? campaignObjectId;
 
   Bando({
     required this.id,
@@ -18,5 +19,6 @@ class Bando {
     required this.payout,
     required this.requiredSensors,
     this.emaConfig,
+    this.campaignObjectId,
   });
 }

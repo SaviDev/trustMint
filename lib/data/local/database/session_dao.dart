@@ -13,4 +13,8 @@ class SessionDao extends DatabaseAccessor<AppDatabase> with _$SessionDaoMixin {
   Future<SessionRecord?> getActiveSession() => (select(
     sessionRecordTable,
   )..where((t) => t.status.equals('running'))).getSingleOrNull();
+
+  Future<void> updateLastChunkHash(String sessionId, String hash) =>
+      (update(sessionRecordTable)..where((t) => t.id.equals(sessionId)))
+          .write(SessionRecordTableCompanion(lastChunkHash: Value(hash)));
 }

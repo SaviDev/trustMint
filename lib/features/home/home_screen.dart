@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:go_router/go_router.dart';
+import '../../data/chain/iota_chain_service.dart';
+import '../bandi/bandi_controller.dart';
 import 'home_controller.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -77,17 +79,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
-  Future<void> _onUpload(BuildContext context) async {
-    final controller = ref.read(homeProvider(widget.bandoId).notifier);
-    await controller.uploadRandomRecords();
+  Future<void> _onCompleteBounty(BuildContext context) async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final pNotifier = ref.read(homeProvider(widget.bandoId).notifier);
+    final pState = ref.read(homeProvider(widget.bandoId));
+    pNotifier.pauseCollection(); // Stop collection first
+
+    final chainService = IotaChainService();
+    final dataHashHex = pState.currentHash;
+
+    // If the hash is empty, meaning no data was sent, we might want to prevent completion
+    // or provide zero hash. For safety, let's pass a dummy hash if empty.
+    final hashToSign = dataHashHex.isNotEmpty
+        ? dataHashHex
+        : '0000000000000000000000000000000000000000000000000000000000000000';
+
+    // Find the campaign object ID from the BandiState if available
+    final bandiState = ref.read(bandiProvider);
+    final currentBando = bandiState.myBandi
+        .where((b) => b.id == widget.bandoId)
+        .firstOrNull;
+
+    final payoutAmount = await chainService.submitAndPayout(
+      bandoId: widget.bandoId,
+      dataHashHex: hashToSign,
+      campaignObjectId: currentBando?.campaignObjectId,
+    );
+
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ 100 record inviati con successo!'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Color(0xFF2ECC71),
-        ),
-      );
+      Navigator.of(context).pop(); // dismiss loading
+    }
+    if (payoutAmount != null) {
+      if (context.mounted) {
+        // Return to previous screen (My bounties) with a special result to trigger animation
+        context.pop({
+          'completed': true,
+          'bandoId': widget.bandoId,
+          'payoutAmount': payoutAmount,
+        });
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to complete bounty on-chain'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -100,7 +145,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       backgroundColor: const Color(0xFF0F1117),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A1D2E),
-        title: Text('Collector - ${widget.bandoId}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Collector - ${widget.bandoId}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           state.isUploading
               ? const Padding(
@@ -114,17 +165,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                   ),
                 )
-              : IconButton(
-                  tooltip: 'Send 100 random records',
-                  icon: const Icon(Icons.upload_rounded, color: Colors.white),
-                  onPressed: () => _onUpload(context),
-                ),
+              : const SizedBox.shrink(),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ---------- User ID chip ----------
+          // ---------- User ID & Hash chips ----------
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -141,7 +188,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'ID: ${state.userId.isEmpty ? "…" : state.userId}',
+                    'DID: ${state.userId.isEmpty ? "…" : state.userId}',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1D2E),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.security,
+                  color: state.currentHash.isNotEmpty
+                      ? const Color(0xFF2ECC71)
+                      : Colors.amber,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Hash: ${state.currentHash.isEmpty ? "Waiting for initial batch (10s)..." : state.currentHash}',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.5),
                       fontSize: 11,
@@ -189,7 +269,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                     Flexible(
                       child: Text(
-                        'Last sync: ${state.lastSync}',
+                        'Last update: ${state.lastSync}',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.45),
                           fontSize: 12,
@@ -298,10 +378,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   backgroundColor: const Color(0xFF6C63FF),
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
                 icon: const Icon(Icons.edit_document),
-                label: const Text('Take Survey Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Take Survey Now',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           if (widget.bandoId == 'b2')
@@ -315,9 +400,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   backgroundColor: const Color(0xFF6C63FF),
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                child: const Text('Generate Mock Data', style: TextStyle(color: Colors.white)),
+                child: const Text(
+                  'Generate Mock Data',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
           const SizedBox(height: 24),
@@ -368,70 +458,74 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
           const SizedBox(height: 24),
 
-          // ---------- Manual upload button ----------
+          // ---------- Play / Pause Collection Button ----------
+          if (allGranted) ...[
+            ElevatedButton.icon(
+              onPressed: () {
+                if (state.isCollecting) {
+                  ref
+                      .read(homeProvider(widget.bandoId).notifier)
+                      .pauseCollection();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Data collection paused ⏸️')),
+                  );
+                } else {
+                  ref
+                      .read(homeProvider(widget.bandoId).notifier)
+                      .resumeCollection();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Data collection resumed ▶️')),
+                  );
+                }
+              },
+              icon: Icon(state.isCollecting ? Icons.pause : Icons.play_arrow),
+              label: Text(
+                state.isCollecting
+                    ? 'Pause Collection'
+                    : (state.totalRecordsSent == 0 &&
+                              (state.lastSync == 'Mai' ||
+                                  state.lastSync == 'Never')
+                          ? 'Start Collection'
+                          : 'Resume Collection'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: state.isCollecting
+                    ? const Color(0xFFE74C3C)
+                    : const Color(0xFF2ECC71),
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(56),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // ---------- Complete Bounty Button ----------
           ElevatedButton.icon(
-            onPressed: state.isUploading ? null : () => _onUpload(context),
-            icon: state.isUploading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.upload_rounded),
-            label: Text(
-              state.isUploading
-                  ? 'Uploading…'
-                  : 'Send 100 Test Records',
+            onPressed: () => _onCompleteBounty(context),
+            icon: const Icon(Icons.monetization_on_rounded),
+            label: const Text(
+              'Complete Bounty & Payout',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6C63FF),
+              backgroundColor: const Color(
+                0xFFF39C12,
+              ), // amber/gold, suitable for payout, neither red nor green
               foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(50),
+              minimumSize: const Size.fromHeight(56),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
           ),
+
+          const SizedBox(height: 16),
         ],
       ),
-      floatingActionButton: allGranted
-          ? Padding(
-              padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight + 16, right: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  FloatingActionButton.extended(
-                    heroTag: 'action_btn',
-                    onPressed: () {
-                      if (state.isCollecting) {
-                        ref.read(homeProvider(widget.bandoId).notifier).pauseCollection();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Data collection paused ⏸️')),
-                        );
-                      } else {
-                        ref.read(homeProvider(widget.bandoId).notifier).resumeCollection();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Data collection resumed ▶️')),
-                        );
-                      }
-                    },
-                    backgroundColor: state.isCollecting ? const Color(0xFFE74C3C) : const Color(0xFF2ECC71),
-                    icon: Icon(state.isCollecting ? Icons.pause : Icons.play_arrow, color: Colors.white),
-                    label: Text(
-                      state.isCollecting
-                          ? 'Pause'
-                          : (state.totalRecordsSent == 0 && (state.lastSync == 'Mai' || state.lastSync == 'Never') ? 'Start' : 'Resume'),
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : null,
     );
   }
 
@@ -501,6 +595,8 @@ class _DataSummarySheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Watch the state so that the sheet rebuilds whenever totalRecordsSent changes
+    ref.watch(homeProvider(bandoId).select((state) => state.totalRecordsSent));
     final controller = ref.watch(homeProvider(bandoId).notifier);
 
     return DraggableScrollableSheet(

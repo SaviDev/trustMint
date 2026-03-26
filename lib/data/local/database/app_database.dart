@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'sensor_dao.dart';
 import 'ema_dao.dart';
 import 'session_dao.dart';
+import 'chunk_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -44,9 +45,20 @@ class SessionRecordTable extends Table {
   TextColumn get bandoId => text()();
   DateTimeColumn get startTime => dateTime()();
   TextColumn get status => text()(); // running | paused | stopped
+  TextColumn get lastChunkHash => text().nullable()(); // Rolling Hash State
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('ChunkRecord')
+class ChunkRecordTable extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get sessionId => text()();
+  TextColumn get dataPayload => text()(); // The JSON payload of the 10s batch
+  TextColumn get chunkHash => text()(); // Hash of this chunk
+  DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get isUploaded => boolean().withDefault(const Constant(false))();
 }
 
 // ─────────────────────────────────────────────────
@@ -54,14 +66,19 @@ class SessionRecordTable extends Table {
 // ─────────────────────────────────────────────────
 
 @DriftDatabase(
-  tables: [SensorDataTable, EmaResponseTable, SessionRecordTable],
-  daos: [SensorDao, EmaDao, SessionDao],
+  tables: [
+    SensorDataTable,
+    EmaResponseTable,
+    SessionRecordTable,
+    ChunkRecordTable,
+  ],
+  daos: [SensorDao, EmaDao, SessionDao, ChunkDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -70,8 +87,15 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from == 1) {
+        if (from <= 1) {
           await m.addColumn(sensorDataTable, sensorDataTable.bandoId);
+        }
+        if (from <= 2) {
+          await m.addColumn(
+            sessionRecordTable,
+            sessionRecordTable.lastChunkHash,
+          );
+          await m.createTable(chunkRecordTable);
         }
       },
     );
@@ -91,6 +115,12 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'data_collector.sqlite'));
-    return NativeDatabase.createInBackground(file);
+    return NativeDatabase.createInBackground(
+      file,
+      setup: (db) {
+        // Enable Write-Ahead Logging to allow concurrent read/writes from different isolates
+        db.execute('PRAGMA journal_mode=WAL;');
+      },
+    );
   });
 }

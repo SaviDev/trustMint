@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../data/local/secure_storage.dart';
 import 'sensor_loop.dart';
 
@@ -53,6 +53,7 @@ Future<void> initBackgroundService() async {
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
+  await dotenv.load(fileName: ".env");
 
   if (service is AndroidServiceInstance) {
     service
@@ -69,31 +70,41 @@ void onStart(ServiceInstance service) async {
       'sess-${now.year}${_p(now.month)}${_p(now.day)}-${_p(now.hour)}${_p(now.minute)}';
 
   // Read the active bandoId and userId persisted by the UI isolate from SecureStorage
-  final storage = SecureStorage();
-  final userId = await storage.getUserId() ?? 'unknown';
   SensorLoop? loop;
   final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('ic_bg_service_small');
-  const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-  await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('ic_bg_service_small');
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: initializationSettings,
+  );
 
   Future<void> syncBandiState() async {
     final storage = SecureStorage();
-    final b1Active = await storage.read('active_b1') == 'true';
-    final b2Active = await storage.read('active_b2') == 'true';
+    final anyBandoActive = await storage.read('any_bando_active') == 'true';
+    final b1Active =
+        await storage.read('active_dummy_1') == 'true' || anyBandoActive;
+    final b2Active = await storage.read('active_b2') == 'true'; // Legacy
 
     // Daily Sensors Logic
     if (b1Active && loop == null) {
-      print('[BGS] Bando b1 ACTIVE. Starting loop and upload timer.');
-      loop = await createSensorLoop(sessionId, 'b1');
+      final currentBandoId =
+          await storage.read('current_bando_id') ?? 'dummy_1';
+      print(
+        '[BGS] Bando ACTIVE. Starting loop and upload timer for $currentBandoId.',
+      );
+      loop = await createSensorLoop(sessionId, currentBandoId);
       loop!.start();
       _uploadTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
         final n = DateTime.now();
-        final l = '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')} ${n.day.toString().padLeft(2, '0')}/${n.month.toString().padLeft(2, '0')}';
+        final l =
+            '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')} ${n.day.toString().padLeft(2, '0')}/${n.month.toString().padLeft(2, '0')}';
         await SecureStorage().write('last_sync', l);
       });
     } else if (!b1Active && loop != null) {
-      print('[BGS] Bando b1 INACTIVE. Halting sensors.');
+      print('[BGS] Bando INACTIVE. Halting sensors.');
       await loop!.stop();
       loop = null;
       _uploadTimer?.cancel();

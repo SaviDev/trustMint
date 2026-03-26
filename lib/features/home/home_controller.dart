@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../data/local/secure_storage.dart';
 import '../../data/local/database/app_database.dart';
+import '../../data/chain/iota_constants.dart';
 
 class HomeState {
   final String userId;
@@ -15,6 +15,8 @@ class HomeState {
   final bool isUploading;
   final bool isCollecting;
   final Map<String, bool> permissions;
+  final int pendingChunks;
+  final String currentHash;
 
   HomeState({
     required this.userId,
@@ -23,6 +25,8 @@ class HomeState {
     required this.isUploading,
     required this.isCollecting,
     required this.permissions,
+    this.pendingChunks = 0,
+    this.currentHash = '',
   });
 
   HomeState copyWith({
@@ -32,6 +36,8 @@ class HomeState {
     bool? isUploading,
     bool? isCollecting,
     Map<String, bool>? permissions,
+    int? pendingChunks,
+    String? currentHash,
   }) => HomeState(
     userId: userId ?? this.userId,
     totalRecordsSent: totalRecordsSent ?? this.totalRecordsSent,
@@ -39,6 +45,8 @@ class HomeState {
     isUploading: isUploading ?? this.isUploading,
     isCollecting: isCollecting ?? this.isCollecting,
     permissions: permissions ?? this.permissions,
+    pendingChunks: pendingChunks ?? this.pendingChunks,
+    currentHash: currentHash ?? this.currentHash,
   );
 }
 
@@ -68,18 +76,21 @@ class HomeController extends StateNotifier<HomeState> {
   }
 
   Future<void> _init() async {
-    // Load or create userId
-    String? id = await _storage.getUserId();
-    if (id == null) {
-      id = const Uuid().v4();
-      await _storage.saveUserId(id);
-    }
+    // We use the testnet user DID object instead of a random UUID
+    String id = IotaChainConstants.defaultUserDidObjectId;
 
     // Last sync label
     final lastSync = await _storage.read('last_sync') ?? 'Never';
 
     // Real record count from DB
     final count = await _db.sensorDao.totalCount(bandoId);
+
+    // Pending chunks count
+    final pending = await _db.chunkDao.getPendingChunks();
+
+    // Current rolling hash from active session
+    final activeSession = await _db.sessionDao.getActiveSession();
+    final currentHash = activeSession?.lastChunkHash ?? '';
 
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
@@ -90,25 +101,42 @@ class HomeController extends StateNotifier<HomeState> {
       totalRecordsSent: count,
       lastSync: lastSync,
       isCollecting: isBandoActive && isRunning,
+      pendingChunks: pending.length,
+      currentHash: currentHash,
     );
 
-    // Poll DB every 5 seconds so the UI stays live while FGS writes data
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    // Poll DB every 1 second so the UI stays live while FGS writes data
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       final freshCount = await _db.sensorDao.totalCount(bandoId);
       final currentIsRunning = await service.isRunning();
       final currentIsActive = await _storage.read('active_$bandoId') == 'true';
       final nowCollecting = currentIsActive && currentIsRunning;
 
-      // also grab fresh lastSync implicitly
-      final freshSync = await _storage.read('last_sync') ?? 'Never';
+      final freshPending = await _db.chunkDao.getPendingChunks();
+      final freshSession = await _db.sessionDao.getActiveSession();
+      final freshHash = freshSession?.lastChunkHash ?? state.currentHash;
+
+      String newSync = state.lastSync;
+      if (freshCount > state.totalRecordsSent) {
+        final now = DateTime.now();
+        newSync =
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+        await _storage.write('last_sync', newSync);
+      } else {
+        newSync = await _storage.read('last_sync') ?? state.lastSync;
+      }
 
       if (freshCount != state.totalRecordsSent ||
           nowCollecting != state.isCollecting ||
-          freshSync != state.lastSync) {
+          newSync != state.lastSync ||
+          freshPending.length != state.pendingChunks ||
+          freshHash != state.currentHash) {
         state = state.copyWith(
           totalRecordsSent: freshCount,
-          lastSync: freshSync,
+          lastSync: newSync,
           isCollecting: nowCollecting,
+          pendingChunks: freshPending.length,
+          currentHash: freshHash,
         );
       }
     });
@@ -138,6 +166,7 @@ class HomeController extends StateNotifier<HomeState> {
   /// Pause data collection by pausing the loop inside the Foreground Service
   Future<void> pauseCollection() async {
     await _storage.write('active_$bandoId', 'false');
+    await _storage.write('any_bando_active', 'false');
     final service = FlutterBackgroundService();
     if (await service.isRunning()) {
       service.invoke("syncBandiState");
@@ -150,6 +179,8 @@ class HomeController extends StateNotifier<HomeState> {
     // Only resume if permissions are still valid
     if (state.permissions.values.every((v) => v == true)) {
       await _storage.write('active_$bandoId', 'true');
+      await _storage.write('any_bando_active', 'true');
+      await _storage.write('current_bando_id', bandoId);
       final service = FlutterBackgroundService();
       if (!(await service.isRunning())) {
         await service.startService();
@@ -171,6 +202,59 @@ class HomeController extends StateNotifier<HomeState> {
     int limit = 10,
   }) async {
     return await _db.sensorDao.getLastRecords(sensorType, bandoId, limit);
+  }
+
+  /// Force-uploads all pending chunks to the backend.
+  /// For the MVP this simulates the upload and reports the final hash.
+  Future<void> forceUpload() async {
+    state = state.copyWith(isUploading: true);
+
+    try {
+      final pending = await _db.chunkDao.getPendingChunks();
+
+      if (pending.isEmpty) {
+        state = state.copyWith(isUploading: false);
+        return;
+      }
+
+      // In production: upload each chunk via DataUploadRemote.uploadChunk()
+      // For MVP: simulate network delay per chunk
+      for (var i = 0; i < pending.length; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        // final chunk = pending[i];
+        // await _uploadRemote.uploadChunk(
+        //   sessionId: chunk.sessionId,
+        //   chunkHash: chunk.chunkHash,
+        //   dataPayload: chunk.dataPayload,
+        // );
+      }
+
+      // Mark all chunks as uploaded
+      await _db.chunkDao.markAsUploaded(pending.map((c) => c.id).toList());
+
+      // The final hash is the rolling hash of the last chunk
+      final finalHash = pending.last.chunkHash;
+
+      final now = DateTime.now();
+      final label =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} '
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}';
+      await _storage.write('last_sync', label);
+
+      final freshCount = await _db.sensorDao.totalCount(bandoId);
+      final freshPending = await _db.chunkDao.getPendingChunks();
+
+      state = state.copyWith(
+        isUploading: false,
+        totalRecordsSent: freshCount,
+        lastSync: label,
+        pendingChunks: freshPending.length,
+        currentHash: finalHash,
+      );
+    } catch (e) {
+      state = state.copyWith(isUploading: false);
+      rethrow;
+    }
   }
 
   /// Generates 100 random sensor samples, inserts them to DB, then "uploads" them.
@@ -196,10 +280,7 @@ class HomeController extends StateNotifier<HomeState> {
       );
     });
 
-    // Insert into local DB
     await _db.sensorDao.insertBatch(batch);
-
-    // Simulate upload delay (replace with real HTTP call)
     await Future.delayed(const Duration(milliseconds: 600));
 
     final now = DateTime.now();
@@ -217,6 +298,10 @@ class HomeController extends StateNotifier<HomeState> {
   }
 }
 
-final homeProvider = StateNotifierProvider.family<HomeController, HomeState, String>((ref, bandoId) {
-  return HomeController(bandoId);
-});
+final homeProvider =
+    StateNotifierProvider.family<HomeController, HomeState, String>((
+      ref,
+      bandoId,
+    ) {
+      return HomeController(bandoId);
+    });

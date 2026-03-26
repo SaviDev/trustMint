@@ -952,8 +952,25 @@ class $SessionRecordTableTable extends SessionRecordTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _lastChunkHashMeta = const VerificationMeta(
+    'lastChunkHash',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, bandoId, startTime, status];
+  late final GeneratedColumn<String> lastChunkHash = GeneratedColumn<String>(
+    'last_chunk_hash',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    bandoId,
+    startTime,
+    status,
+    lastChunkHash,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -995,6 +1012,15 @@ class $SessionRecordTableTable extends SessionRecordTable
     } else if (isInserting) {
       context.missing(_statusMeta);
     }
+    if (data.containsKey('last_chunk_hash')) {
+      context.handle(
+        _lastChunkHashMeta,
+        lastChunkHash.isAcceptableOrUnknown(
+          data['last_chunk_hash']!,
+          _lastChunkHashMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1020,6 +1046,10 @@ class $SessionRecordTableTable extends SessionRecordTable
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      lastChunkHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_chunk_hash'],
+      ),
     );
   }
 
@@ -1034,11 +1064,13 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
   final String bandoId;
   final DateTime startTime;
   final String status;
+  final String? lastChunkHash;
   const SessionRecord({
     required this.id,
     required this.bandoId,
     required this.startTime,
     required this.status,
+    this.lastChunkHash,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1047,6 +1079,9 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
     map['bando_id'] = Variable<String>(bandoId);
     map['start_time'] = Variable<DateTime>(startTime);
     map['status'] = Variable<String>(status);
+    if (!nullToAbsent || lastChunkHash != null) {
+      map['last_chunk_hash'] = Variable<String>(lastChunkHash);
+    }
     return map;
   }
 
@@ -1056,6 +1091,9 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
       bandoId: Value(bandoId),
       startTime: Value(startTime),
       status: Value(status),
+      lastChunkHash: lastChunkHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastChunkHash),
     );
   }
 
@@ -1069,6 +1107,7 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
       bandoId: serializer.fromJson<String>(json['bandoId']),
       startTime: serializer.fromJson<DateTime>(json['startTime']),
       status: serializer.fromJson<String>(json['status']),
+      lastChunkHash: serializer.fromJson<String?>(json['lastChunkHash']),
     );
   }
   @override
@@ -1079,6 +1118,7 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
       'bandoId': serializer.toJson<String>(bandoId),
       'startTime': serializer.toJson<DateTime>(startTime),
       'status': serializer.toJson<String>(status),
+      'lastChunkHash': serializer.toJson<String?>(lastChunkHash),
     };
   }
 
@@ -1087,11 +1127,15 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
     String? bandoId,
     DateTime? startTime,
     String? status,
+    Value<String?> lastChunkHash = const Value.absent(),
   }) => SessionRecord(
     id: id ?? this.id,
     bandoId: bandoId ?? this.bandoId,
     startTime: startTime ?? this.startTime,
     status: status ?? this.status,
+    lastChunkHash: lastChunkHash.present
+        ? lastChunkHash.value
+        : this.lastChunkHash,
   );
   SessionRecord copyWithCompanion(SessionRecordTableCompanion data) {
     return SessionRecord(
@@ -1099,6 +1143,9 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
       bandoId: data.bandoId.present ? data.bandoId.value : this.bandoId,
       startTime: data.startTime.present ? data.startTime.value : this.startTime,
       status: data.status.present ? data.status.value : this.status,
+      lastChunkHash: data.lastChunkHash.present
+          ? data.lastChunkHash.value
+          : this.lastChunkHash,
     );
   }
 
@@ -1108,13 +1155,15 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
           ..write('id: $id, ')
           ..write('bandoId: $bandoId, ')
           ..write('startTime: $startTime, ')
-          ..write('status: $status')
+          ..write('status: $status, ')
+          ..write('lastChunkHash: $lastChunkHash')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, bandoId, startTime, status);
+  int get hashCode =>
+      Object.hash(id, bandoId, startTime, status, lastChunkHash);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1122,7 +1171,8 @@ class SessionRecord extends DataClass implements Insertable<SessionRecord> {
           other.id == this.id &&
           other.bandoId == this.bandoId &&
           other.startTime == this.startTime &&
-          other.status == this.status);
+          other.status == this.status &&
+          other.lastChunkHash == this.lastChunkHash);
 }
 
 class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
@@ -1130,12 +1180,14 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
   final Value<String> bandoId;
   final Value<DateTime> startTime;
   final Value<String> status;
+  final Value<String?> lastChunkHash;
   final Value<int> rowid;
   const SessionRecordTableCompanion({
     this.id = const Value.absent(),
     this.bandoId = const Value.absent(),
     this.startTime = const Value.absent(),
     this.status = const Value.absent(),
+    this.lastChunkHash = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SessionRecordTableCompanion.insert({
@@ -1143,6 +1195,7 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
     required String bandoId,
     required DateTime startTime,
     required String status,
+    this.lastChunkHash = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        bandoId = Value(bandoId),
@@ -1153,6 +1206,7 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
     Expression<String>? bandoId,
     Expression<DateTime>? startTime,
     Expression<String>? status,
+    Expression<String>? lastChunkHash,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1160,6 +1214,7 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
       if (bandoId != null) 'bando_id': bandoId,
       if (startTime != null) 'start_time': startTime,
       if (status != null) 'status': status,
+      if (lastChunkHash != null) 'last_chunk_hash': lastChunkHash,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1169,6 +1224,7 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
     Value<String>? bandoId,
     Value<DateTime>? startTime,
     Value<String>? status,
+    Value<String?>? lastChunkHash,
     Value<int>? rowid,
   }) {
     return SessionRecordTableCompanion(
@@ -1176,6 +1232,7 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
       bandoId: bandoId ?? this.bandoId,
       startTime: startTime ?? this.startTime,
       status: status ?? this.status,
+      lastChunkHash: lastChunkHash ?? this.lastChunkHash,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1195,6 +1252,9 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
+    if (lastChunkHash.present) {
+      map['last_chunk_hash'] = Variable<String>(lastChunkHash.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1208,7 +1268,416 @@ class SessionRecordTableCompanion extends UpdateCompanion<SessionRecord> {
           ..write('bandoId: $bandoId, ')
           ..write('startTime: $startTime, ')
           ..write('status: $status, ')
+          ..write('lastChunkHash: $lastChunkHash, ')
           ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ChunkRecordTableTable extends ChunkRecordTable
+    with TableInfo<$ChunkRecordTableTable, ChunkRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ChunkRecordTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dataPayloadMeta = const VerificationMeta(
+    'dataPayload',
+  );
+  @override
+  late final GeneratedColumn<String> dataPayload = GeneratedColumn<String>(
+    'data_payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chunkHashMeta = const VerificationMeta(
+    'chunkHash',
+  );
+  @override
+  late final GeneratedColumn<String> chunkHash = GeneratedColumn<String>(
+    'chunk_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isUploadedMeta = const VerificationMeta(
+    'isUploaded',
+  );
+  @override
+  late final GeneratedColumn<bool> isUploaded = GeneratedColumn<bool>(
+    'is_uploaded',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_uploaded" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    dataPayload,
+    chunkHash,
+    createdAt,
+    isUploaded,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'chunk_record_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ChunkRecord> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('data_payload')) {
+      context.handle(
+        _dataPayloadMeta,
+        dataPayload.isAcceptableOrUnknown(
+          data['data_payload']!,
+          _dataPayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dataPayloadMeta);
+    }
+    if (data.containsKey('chunk_hash')) {
+      context.handle(
+        _chunkHashMeta,
+        chunkHash.isAcceptableOrUnknown(data['chunk_hash']!, _chunkHashMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chunkHashMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('is_uploaded')) {
+      context.handle(
+        _isUploadedMeta,
+        isUploaded.isAcceptableOrUnknown(data['is_uploaded']!, _isUploadedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ChunkRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ChunkRecord(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      dataPayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data_payload'],
+      )!,
+      chunkHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chunk_hash'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      isUploaded: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_uploaded'],
+      )!,
+    );
+  }
+
+  @override
+  $ChunkRecordTableTable createAlias(String alias) {
+    return $ChunkRecordTableTable(attachedDatabase, alias);
+  }
+}
+
+class ChunkRecord extends DataClass implements Insertable<ChunkRecord> {
+  final int id;
+  final String sessionId;
+  final String dataPayload;
+  final String chunkHash;
+  final DateTime createdAt;
+  final bool isUploaded;
+  const ChunkRecord({
+    required this.id,
+    required this.sessionId,
+    required this.dataPayload,
+    required this.chunkHash,
+    required this.createdAt,
+    required this.isUploaded,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['data_payload'] = Variable<String>(dataPayload);
+    map['chunk_hash'] = Variable<String>(chunkHash);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['is_uploaded'] = Variable<bool>(isUploaded);
+    return map;
+  }
+
+  ChunkRecordTableCompanion toCompanion(bool nullToAbsent) {
+    return ChunkRecordTableCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      dataPayload: Value(dataPayload),
+      chunkHash: Value(chunkHash),
+      createdAt: Value(createdAt),
+      isUploaded: Value(isUploaded),
+    );
+  }
+
+  factory ChunkRecord.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ChunkRecord(
+      id: serializer.fromJson<int>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      dataPayload: serializer.fromJson<String>(json['dataPayload']),
+      chunkHash: serializer.fromJson<String>(json['chunkHash']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      isUploaded: serializer.fromJson<bool>(json['isUploaded']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'dataPayload': serializer.toJson<String>(dataPayload),
+      'chunkHash': serializer.toJson<String>(chunkHash),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'isUploaded': serializer.toJson<bool>(isUploaded),
+    };
+  }
+
+  ChunkRecord copyWith({
+    int? id,
+    String? sessionId,
+    String? dataPayload,
+    String? chunkHash,
+    DateTime? createdAt,
+    bool? isUploaded,
+  }) => ChunkRecord(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    dataPayload: dataPayload ?? this.dataPayload,
+    chunkHash: chunkHash ?? this.chunkHash,
+    createdAt: createdAt ?? this.createdAt,
+    isUploaded: isUploaded ?? this.isUploaded,
+  );
+  ChunkRecord copyWithCompanion(ChunkRecordTableCompanion data) {
+    return ChunkRecord(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      dataPayload: data.dataPayload.present
+          ? data.dataPayload.value
+          : this.dataPayload,
+      chunkHash: data.chunkHash.present ? data.chunkHash.value : this.chunkHash,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      isUploaded: data.isUploaded.present
+          ? data.isUploaded.value
+          : this.isUploaded,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ChunkRecord(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('dataPayload: $dataPayload, ')
+          ..write('chunkHash: $chunkHash, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('isUploaded: $isUploaded')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, sessionId, dataPayload, chunkHash, createdAt, isUploaded);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ChunkRecord &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.dataPayload == this.dataPayload &&
+          other.chunkHash == this.chunkHash &&
+          other.createdAt == this.createdAt &&
+          other.isUploaded == this.isUploaded);
+}
+
+class ChunkRecordTableCompanion extends UpdateCompanion<ChunkRecord> {
+  final Value<int> id;
+  final Value<String> sessionId;
+  final Value<String> dataPayload;
+  final Value<String> chunkHash;
+  final Value<DateTime> createdAt;
+  final Value<bool> isUploaded;
+  const ChunkRecordTableCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.dataPayload = const Value.absent(),
+    this.chunkHash = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.isUploaded = const Value.absent(),
+  });
+  ChunkRecordTableCompanion.insert({
+    this.id = const Value.absent(),
+    required String sessionId,
+    required String dataPayload,
+    required String chunkHash,
+    required DateTime createdAt,
+    this.isUploaded = const Value.absent(),
+  }) : sessionId = Value(sessionId),
+       dataPayload = Value(dataPayload),
+       chunkHash = Value(chunkHash),
+       createdAt = Value(createdAt);
+  static Insertable<ChunkRecord> custom({
+    Expression<int>? id,
+    Expression<String>? sessionId,
+    Expression<String>? dataPayload,
+    Expression<String>? chunkHash,
+    Expression<DateTime>? createdAt,
+    Expression<bool>? isUploaded,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (dataPayload != null) 'data_payload': dataPayload,
+      if (chunkHash != null) 'chunk_hash': chunkHash,
+      if (createdAt != null) 'created_at': createdAt,
+      if (isUploaded != null) 'is_uploaded': isUploaded,
+    });
+  }
+
+  ChunkRecordTableCompanion copyWith({
+    Value<int>? id,
+    Value<String>? sessionId,
+    Value<String>? dataPayload,
+    Value<String>? chunkHash,
+    Value<DateTime>? createdAt,
+    Value<bool>? isUploaded,
+  }) {
+    return ChunkRecordTableCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      dataPayload: dataPayload ?? this.dataPayload,
+      chunkHash: chunkHash ?? this.chunkHash,
+      createdAt: createdAt ?? this.createdAt,
+      isUploaded: isUploaded ?? this.isUploaded,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (dataPayload.present) {
+      map['data_payload'] = Variable<String>(dataPayload.value);
+    }
+    if (chunkHash.present) {
+      map['chunk_hash'] = Variable<String>(chunkHash.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (isUploaded.present) {
+      map['is_uploaded'] = Variable<bool>(isUploaded.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ChunkRecordTableCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('dataPayload: $dataPayload, ')
+          ..write('chunkHash: $chunkHash, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('isUploaded: $isUploaded')
           ..write(')'))
         .toString();
   }
@@ -1225,9 +1694,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $SessionRecordTableTable sessionRecordTable =
       $SessionRecordTableTable(this);
+  late final $ChunkRecordTableTable chunkRecordTable = $ChunkRecordTableTable(
+    this,
+  );
   late final SensorDao sensorDao = SensorDao(this as AppDatabase);
   late final EmaDao emaDao = EmaDao(this as AppDatabase);
   late final SessionDao sessionDao = SessionDao(this as AppDatabase);
+  late final ChunkDao chunkDao = ChunkDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1236,6 +1709,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     sensorDataTable,
     emaResponseTable,
     sessionRecordTable,
+    chunkRecordTable,
   ];
 }
 
@@ -1717,6 +2191,7 @@ typedef $$SessionRecordTableTableCreateCompanionBuilder =
       required String bandoId,
       required DateTime startTime,
       required String status,
+      Value<String?> lastChunkHash,
       Value<int> rowid,
     });
 typedef $$SessionRecordTableTableUpdateCompanionBuilder =
@@ -1725,6 +2200,7 @@ typedef $$SessionRecordTableTableUpdateCompanionBuilder =
       Value<String> bandoId,
       Value<DateTime> startTime,
       Value<String> status,
+      Value<String?> lastChunkHash,
       Value<int> rowid,
     });
 
@@ -1754,6 +2230,11 @@ class $$SessionRecordTableTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastChunkHash => $composableBuilder(
+    column: $table.lastChunkHash,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1786,6 +2267,11 @@ class $$SessionRecordTableTableOrderingComposer
     column: $table.status,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get lastChunkHash => $composableBuilder(
+    column: $table.lastChunkHash,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SessionRecordTableTableAnnotationComposer
@@ -1808,6 +2294,11 @@ class $$SessionRecordTableTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get lastChunkHash => $composableBuilder(
+    column: $table.lastChunkHash,
+    builder: (column) => column,
+  );
 }
 
 class $$SessionRecordTableTableTableManager
@@ -1854,12 +2345,14 @@ class $$SessionRecordTableTableTableManager
                 Value<String> bandoId = const Value.absent(),
                 Value<DateTime> startTime = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String?> lastChunkHash = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionRecordTableCompanion(
                 id: id,
                 bandoId: bandoId,
                 startTime: startTime,
                 status: status,
+                lastChunkHash: lastChunkHash,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1868,12 +2361,14 @@ class $$SessionRecordTableTableTableManager
                 required String bandoId,
                 required DateTime startTime,
                 required String status,
+                Value<String?> lastChunkHash = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionRecordTableCompanion.insert(
                 id: id,
                 bandoId: bandoId,
                 startTime: startTime,
                 status: status,
+                lastChunkHash: lastChunkHash,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -1901,6 +2396,225 @@ typedef $$SessionRecordTableTableProcessedTableManager =
       SessionRecord,
       PrefetchHooks Function()
     >;
+typedef $$ChunkRecordTableTableCreateCompanionBuilder =
+    ChunkRecordTableCompanion Function({
+      Value<int> id,
+      required String sessionId,
+      required String dataPayload,
+      required String chunkHash,
+      required DateTime createdAt,
+      Value<bool> isUploaded,
+    });
+typedef $$ChunkRecordTableTableUpdateCompanionBuilder =
+    ChunkRecordTableCompanion Function({
+      Value<int> id,
+      Value<String> sessionId,
+      Value<String> dataPayload,
+      Value<String> chunkHash,
+      Value<DateTime> createdAt,
+      Value<bool> isUploaded,
+    });
+
+class $$ChunkRecordTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ChunkRecordTableTable> {
+  $$ChunkRecordTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dataPayload => $composableBuilder(
+    column: $table.dataPayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chunkHash => $composableBuilder(
+    column: $table.chunkHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isUploaded => $composableBuilder(
+    column: $table.isUploaded,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ChunkRecordTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ChunkRecordTableTable> {
+  $$ChunkRecordTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dataPayload => $composableBuilder(
+    column: $table.dataPayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chunkHash => $composableBuilder(
+    column: $table.chunkHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isUploaded => $composableBuilder(
+    column: $table.isUploaded,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ChunkRecordTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ChunkRecordTableTable> {
+  $$ChunkRecordTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get dataPayload => $composableBuilder(
+    column: $table.dataPayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get chunkHash =>
+      $composableBuilder(column: $table.chunkHash, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isUploaded => $composableBuilder(
+    column: $table.isUploaded,
+    builder: (column) => column,
+  );
+}
+
+class $$ChunkRecordTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ChunkRecordTableTable,
+          ChunkRecord,
+          $$ChunkRecordTableTableFilterComposer,
+          $$ChunkRecordTableTableOrderingComposer,
+          $$ChunkRecordTableTableAnnotationComposer,
+          $$ChunkRecordTableTableCreateCompanionBuilder,
+          $$ChunkRecordTableTableUpdateCompanionBuilder,
+          (
+            ChunkRecord,
+            BaseReferences<_$AppDatabase, $ChunkRecordTableTable, ChunkRecord>,
+          ),
+          ChunkRecord,
+          PrefetchHooks Function()
+        > {
+  $$ChunkRecordTableTableTableManager(
+    _$AppDatabase db,
+    $ChunkRecordTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ChunkRecordTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ChunkRecordTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ChunkRecordTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> dataPayload = const Value.absent(),
+                Value<String> chunkHash = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> isUploaded = const Value.absent(),
+              }) => ChunkRecordTableCompanion(
+                id: id,
+                sessionId: sessionId,
+                dataPayload: dataPayload,
+                chunkHash: chunkHash,
+                createdAt: createdAt,
+                isUploaded: isUploaded,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String sessionId,
+                required String dataPayload,
+                required String chunkHash,
+                required DateTime createdAt,
+                Value<bool> isUploaded = const Value.absent(),
+              }) => ChunkRecordTableCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                dataPayload: dataPayload,
+                chunkHash: chunkHash,
+                createdAt: createdAt,
+                isUploaded: isUploaded,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ChunkRecordTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ChunkRecordTableTable,
+      ChunkRecord,
+      $$ChunkRecordTableTableFilterComposer,
+      $$ChunkRecordTableTableOrderingComposer,
+      $$ChunkRecordTableTableAnnotationComposer,
+      $$ChunkRecordTableTableCreateCompanionBuilder,
+      $$ChunkRecordTableTableUpdateCompanionBuilder,
+      (
+        ChunkRecord,
+        BaseReferences<_$AppDatabase, $ChunkRecordTableTable, ChunkRecord>,
+      ),
+      ChunkRecord,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1911,4 +2625,6 @@ class $AppDatabaseManager {
       $$EmaResponseTableTableTableManager(_db, _db.emaResponseTable);
   $$SessionRecordTableTableTableManager get sessionRecordTable =>
       $$SessionRecordTableTableTableManager(_db, _db.sessionRecordTable);
+  $$ChunkRecordTableTableTableManager get chunkRecordTable =>
+      $$ChunkRecordTableTableTableManager(_db, _db.chunkRecordTable);
 }
